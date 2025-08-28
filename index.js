@@ -40,6 +40,8 @@ const io = new Server(server, {
 // Game state storage
 const games = {} // Maps roomId => game state
 const socketRoomMap = {} // Maps socket.id => roomId
+const roomPlayers = {}; // Maps roomId => { w: socketId, b: socketId }
+
 
 // Handle client connections
 io.on('connection', (socket) => {
@@ -47,7 +49,30 @@ io.on('connection', (socket) => {
 
   // Join a game room
   socket.on('joinRoom', (roomId) => {
-    console.log(`📥 Client ${socket.id} is joining room ${roomId}`)
+
+    //Assign player Color
+    if(!roomPlayers[roomId]) roomPlayers[roomId] = {} 
+    let color = 'w'; 
+   
+    if(!roomPlayers[roomId].w){
+      
+      roomPlayers[roomId].w = socket.id; 
+      color = 'w'; 
+       
+    }else if(!roomPlayers[roomId].b){
+      roomPlayers[roomId].b = socket.id; 
+      color = 'b'; 
+      
+    }else{
+      //Room Full 
+      socket.emit('roomFull'); 
+      return; 
+    }
+  //console.log('color', {color}); 
+  socket.emit('playerColor', {color}); 
+  console.log('roomPlayers:', JSON.stringify(roomPlayers, null, 2));
+  console.log(`📥 Client ${socket.id} is joining room ${roomId} and color is ${color}`)
+
 
     // Initialize game state for room if not already created
     if (!games[roomId]) {
@@ -70,14 +95,24 @@ io.on('connection', (socket) => {
 
   // Handle move from a client
   socket.on('makeMove', (move) => {
-    const roomId = socketRoomMap[socket.id]
-
+    //console.log('♟️ Move received:', move)
+    const roomId = socketRoomMap[socket.id] 
+   
     if (!roomId) {
       console.log('❌ No room associated with this socket')
       return
     }
+    //Only allow move if it's this players turn 
+    const currentTurn = games[roomId].turn; 
+    const playerColor = Object.entries(roomPlayers[roomId]).find(([color, id]) => id === socket.id)?.[0]; 
 
-    console.log(`♟️ Move received in room ${roomId}:`, move)
+    
+    if(playerColor !== currentTurn){
+      socket.emit('invalidMove', {reason: 'Not your turn!'}); 
+      return; 
+    }
+
+    //console.log(`♟️ Move received in room ${roomId}:`, move)
     const { piece, rank, file, x, y, currentPosition } = move
 
     // Perform the move using the arbiter
@@ -88,18 +123,60 @@ io.on('connection', (socket) => {
       file,
       x,
       y,
+    }) 
+    const opponent = move.opponent; 
+
+ const castleDirection = getCastlingDirections({
+       castleDirection: move.castleDirection,
+       piece: move.piece, 
+       rank: move.rank, 
+       file: move.file
     })
+
+  const isInCheck = arbiter.isPlayerInCheck({
+      positionAfterMove: newBoard,
+      position: currentPosition,
+      player: opponent
+    }) 
+
+  
+// returns true because it is in checkmate 
+if(arbiter.isCheckMate(
+      newBoard,
+      opponent,
+      castleDirection,
+      piece, rank, file
+    )){
+      //kind of works if using opponent instead of piece
+       
+       io.to(roomId).emit('isCheckMate', move.piece );
+    }
+
+
+
+  
+
 
     // Update game state
     games[roomId].board = newBoard
     games[roomId].turn = games[roomId].turn === 'w' ? 'b' : 'w'
-    games[roomId].oldPosition = currentPosition
+    games[roomId].oldPosition = currentPosition 
+    
+     
+     
+    
+     
+     
 
     // Send updated board back to all clients in the room
-    io.to(roomId).emit('moveResult', {
+    io.to(roomId).emit('moveResult', { 
       newPosition: newBoard,
       turn: games[roomId].turn,
     })
+    
+    
+    
+    
   })
 
   // Castle update handler 
@@ -125,7 +202,12 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('castlingUpdate', {
       action: direction
     });
+
+     
+
   }) 
+
+  
 
 
 
@@ -149,15 +231,16 @@ io.on('connection', (socket) => {
 
 
 
-  // Handle disconnect
+  // Handle disconnect 
   socket.on('disconnect', () => {
-    const roomId = socketRoomMap[socket.id]
-    console.log(`❌ Client disconnected: ${socket.id}`)
-
-    if (roomId) {
-      delete socketRoomMap[socket.id]
-    }
-  })
+  const roomId = socketRoomMap[socket.id];
+  if (roomId && roomPlayers[roomId]) {
+    if (roomPlayers[roomId].w === socket.id) delete roomPlayers[roomId].w;
+    if (roomPlayers[roomId].b === socket.id) delete roomPlayers[roomId].b;
+    if (Object.keys(roomPlayers[roomId]).length === 0) delete roomPlayers[roomId];
+  }
+  if (roomId) delete socketRoomMap[socket.id];
+});
 })
 
 // Start the server

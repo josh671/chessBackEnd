@@ -18,17 +18,17 @@ const Board = () => {
   const {appState} = useAppContext(); 
   const position = appState.position[appState.position.length - 1]; 
   
-  const isChecked = (() =>{
-    const isInCheck = arbiter.isPlayerInCheck({
-      positionAfterMove: position, 
-      player: appState.turn, 
+  // const isChecked = (() =>{
+  //   const isInCheck = arbiter.isPlayerInCheck({
+  //     positionAfterMove: position, 
+  //     player: appState.turn, 
 
-    })
-    if(isInCheck){
-      return getKingPosition(position, appState.turn); 
-    }
-    return null; 
-  })()
+  //   })
+  //   if(isInCheck){
+  //     return getKingPosition(position, appState.turn); 
+  //   }
+  //   return null; 
+  // })()
  
     const getClassName = (i, j) =>{
         let c = 'tile'; 

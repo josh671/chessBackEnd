@@ -32,7 +32,7 @@
  
 
  const copyPosition = (position) =>{
-  console.log("backend ", position); 
+  //console.log("backend ", position); 
     const newPosition = new Array(8).fill("").map(x=> new Array(8).fill(""));
 
     for(let rank = 0; rank < position.length; rank++){
