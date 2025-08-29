@@ -132,6 +132,12 @@ io.on('connection', (socket) => {
        rank: move.rank, 
        file: move.file
     })
+  if(castleDirection){
+    io.to(roomId).emit('castlingUpdate', {
+      action: castleDirection
+    });
+  }
+  
   
 
   const isInCheck = arbiter.isPlayerInCheck({
@@ -180,30 +186,7 @@ if(arbiter.isCheckMate(
     
   })
 
-  // Castle update handler 
-  socket.on('castlingUpdate', (castleStuff) => {
-    const roomId = socketRoomMap[socket.id]
-
-    if (!roomId) {
-      console.log('❌ No room associated with this socket')
-      return
-    }
-    
-
-     const direction = getCastlingDirections({
-       castleDirection: castleStuff.castleDirection,
-       piece: castleStuff.piece, 
-       rank: castleStuff.rank, 
-       file: castleStuff.file
-    })
-    
-    io.to(roomId).emit('castlingUpdate', {
-      action: direction
-    });
-
-     
-
-  }) 
+  
 
   
 
