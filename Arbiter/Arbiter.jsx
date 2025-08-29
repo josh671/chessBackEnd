@@ -123,7 +123,12 @@ const arbiter = {
 
     const pieces = getPieces(position, player);
     const moves = pieces.reduce((acc, p) => acc.concat(
-      this.getValidMoves({position, castleDirection, piece, rank, file})
+      this.getValidMoves({
+        position, 
+        castleDirection, 
+        prevPosition: position, 
+        ...p 
+      })
     ), []);
 
     return moves.length === 0;

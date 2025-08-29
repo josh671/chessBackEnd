@@ -132,6 +132,7 @@ io.on('connection', (socket) => {
        rank: move.rank, 
        file: move.file
     })
+  
 
   const isInCheck = arbiter.isPlayerInCheck({
       positionAfterMove: newBoard,
@@ -196,9 +197,6 @@ if(arbiter.isCheckMate(
        file: castleStuff.file
     })
     
-     
-     
-
     io.to(roomId).emit('castlingUpdate', {
       action: direction
     });
