@@ -146,6 +146,7 @@ const getPawnCaptures = ({ position, prevPosition, piece, rank, file }) => {
 };
 
 const getCastlingMoves = ({ position, castleDirection, piece, rank, file }) => {
+  const { arbiter } = require('./Arbiter.jsx');
   const moves = [];
 
   const isWhite = piece.startsWith('w');
