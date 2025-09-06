@@ -12,7 +12,7 @@ const { emit } = require('process')
 const { openPromotion } = require('./Reducer/Actions/popup.jsx')
 const { reducer } = require('./Reducer/Actions/move.jsx') 
 const { detectCheckMate } = require('./Reducer/Actions/game.jsx')
-
+const { initGameState } = require('./Constants.js')
 const app = express()
 
 // Middleware
@@ -159,24 +159,6 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('isCheckMate', ({type: actionTypes.WIN, payload: move.piece[0]}))
     }
 
-    // socket.on('promotePawn', (promotion) =>{
-
-    //   console.log('Promotion received:', promotion);
-    //   const newBoard = arbiter.performMove({
-    //     position: promotion.newPosition,
-    //     piece: promotion.piece,
-    //     rank: promotion.rank,
-    //     file: promotion.file,
-    //     x: promotion.x,
-    //     y: promotion.y
-    //         })
-    //       console.log('turn after promotion', games[roomId].turn );
-    //   io.to(roomId).emit('moveResult', {
-    //     newPosition: newBoard,
-    //     turn: games[roomId].turn,
-
-    // })
-    // })
 
     if ((piece === 'wp' && x == 7) || (piece === 'bp' && x === 0)) {
       socket.emit('openPromotionBox', {
@@ -222,6 +204,54 @@ io.on('connection', (socket) => {
       turn: games[roomId].turn,
     })
   })
+
+
+  // // Initialize game state for room if not already created
+  //   if (!games[roomId]) {
+  //     games[roomId] = {
+  //       board: createPosition(), // starting board
+  //       turn: 'w', // white starts
+  //       castleDirection: { w: {}, b: {} },
+  //     }
+  //   }
+
+  //   socket.join(roomId)
+  //   socketRoomMap[socket.id] = roomId
+
+  //   // Send initial game state to this client
+  //   socket.emit('board', {
+  //     board: games[roomId].board,
+  //     turn: games[roomId].turn,
+  //   })
+
+  socket.on('setUpNewGame', (newGame) =>{ 
+     const roomId = newGame.roomId; 
+     console.log('Setting up new game in room', roomId);
+     if(!roomId){
+        console.log('No roomId provided for new game setup');
+        return; 
+      }
+
+      games[roomId] = {
+        board: createPosition(), // starting board
+        turn: 'w', // white starts
+      }
+
+      io.to(roomId).emit('newGame', {
+        type:actionTypes.NEW_GAME, 
+        payload: initGameState, 
+        
+      })
+
+      io.to(roomId).emit('closePopup', {
+        type: actionTypes.CLOSE_POPUP,
+        
+      })
+
+ 
+  })
+
+
 
 
   // Handle disconnect
