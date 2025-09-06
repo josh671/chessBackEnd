@@ -10,7 +10,8 @@ const { updateCastling } = require('./Reducer/Actions/game.jsx')
 const { actionTypes } = require('./Reducer/Actions/actionTypes.jsx')
 const { emit } = require('process')
 const { openPromotion } = require('./Reducer/Actions/popup.jsx')
-const { reducer } = require('./Reducer/Actions/move.jsx')
+const { reducer } = require('./Reducer/Actions/move.jsx') 
+const { detectCheckMate } = require('./Reducer/Actions/game.jsx')
 
 const app = express()
 
@@ -155,7 +156,7 @@ io.on('connection', (socket) => {
     ) {
       //kind of works if using opponent instead of piece
 
-      io.to(roomId).emit('isCheckMate', move.piece)
+      io.to(roomId).emit('isCheckMate', ({type: actionTypes.WIN, payload: move.piece[0]}))
     }
 
     // socket.on('promotePawn', (promotion) =>{
@@ -222,23 +223,6 @@ io.on('connection', (socket) => {
     })
   })
 
-  // socket.on('makePromotion', (promotionStuff) =>{
-  //   //console.log("Promotion stuff", promotionStuff);
-  //   const roomId = socketRoomMap[socket.id];
-
-  //   if (!roomId) {
-  //     console.log('❌ No room associated with this socket')
-  //     return
-  //   }
-
-  //   if ((promotionStuff.piece === 'wp' && promotionStuff.x == 7) || (promotionStuff.piece === 'bp' && promotionStuff.x === 0)){
-  //     socket.emit('openPromotionBox', {
-  //       action: openPromotion({rank: Number(promotionStuff.rank), file: Number(promotionStuff.file), x: promotionStuff.x, y: promotionStuff.y})
-
-  //     })
-  //   }
-
-  // })
 
   // Handle disconnect
   socket.on('disconnect', () => {
