@@ -133,7 +133,8 @@ io.on('connection', (socket) => {
     })
     if (castleDirection) {
       io.to(roomId).emit('castlingUpdate', {
-        action: castleDirection,
+        type: actionTypes.CAN_CASTLE,
+        payload: castleDirection,
       })
     }
 
@@ -205,24 +206,6 @@ io.on('connection', (socket) => {
     })
   })
 
-
-  // // Initialize game state for room if not already created
-  //   if (!games[roomId]) {
-  //     games[roomId] = {
-  //       board: createPosition(), // starting board
-  //       turn: 'w', // white starts
-  //       castleDirection: { w: {}, b: {} },
-  //     }
-  //   }
-
-  //   socket.join(roomId)
-  //   socketRoomMap[socket.id] = roomId
-
-  //   // Send initial game state to this client
-  //   socket.emit('board', {
-  //     board: games[roomId].board,
-  //     turn: games[roomId].turn,
-  //   })
 
   socket.on('setUpNewGame', (newGame) =>{ 
      const roomId = newGame.roomId; 
