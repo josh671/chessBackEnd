@@ -140,7 +140,7 @@ io.on('connection', (socket) => {
         games[roomId].castleDirection = { w: 'both', b: 'both' };
       }
       games[roomId].castleDirection[castleDirection.player] = castleDirection.direction;
-      
+
       // Emit to all clients
       io.to(roomId).emit('castlingUpdate', {
         type: actionTypes.CAN_CASTLE,
@@ -194,7 +194,7 @@ io.on('connection', (socket) => {
       arbiter.isCheckMate(
         newBoard,
         opponent,
-        castleDirection,
+        games[roomId].castleDirection,
         piece,
         rank,
         file,
