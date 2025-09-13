@@ -1,7 +1,15 @@
- const getCharacter = file => String.fromCharCode(file + 96); 
+/**
+ * Converts a file number to its corresponding chess notation letter
+ * @param {number} file - File number (0-7)
+ * @returns {string} Chess notation letter ('a'-'h')
+ */
+const getCharacter = file => String.fromCharCode(file + 96); 
 
-
- const createPosition =()=>{
+/**
+ * Creates the initial chess board position with all pieces in starting positions
+ * @returns {Array<Array<string>>} 8x8 array representing the initial chess board
+ */
+const createPosition =()=>{
     const position = new Array(8).fill('').map(x=> new Array(8).fill(''));
 // adds pawns to board 
    for(let i = 0; i < 8; i++){
@@ -31,7 +39,12 @@
 } 
  
 
- const copyPosition = (position) =>{
+/**
+ * Creates a deep copy of a chess board position
+ * @param {Array<Array<string>>} position - Original 8x8 board position
+ * @returns {Array<Array<string>>} New 8x8 board position (deep copy)
+ */
+const copyPosition = (position) =>{
   //console.log("backend ", position); 
     const newPosition = new Array(8).fill("").map(x=> new Array(8).fill(""));
 
@@ -43,10 +56,22 @@
     return newPosition; 
 }
 
- const areSameColorTiles = (coords1, coords2) => 
+/**
+ * Determines if two board squares are the same color (light or dark)
+ * @param {Object} coords1 - First coordinate {x: number, y: number}
+ * @param {Object} coords2 - Second coordinate {x: number, y: number}
+ * @returns {boolean} True if both squares are the same color
+ */
+const areSameColorTiles = (coords1, coords2) => 
   (coords1.x + coords1.y) % 2 === (coords2.x + coords2.y) % 2
  
- const findPieceCoords = (position, type) => {
+/**
+ * Finds all coordinates of a specific piece type on the board
+ * @param {Array<Array<string>>} position - 8x8 board position
+ * @param {string} type - Piece type to search for (e.g., 'wk', 'bp')
+ * @returns {Array<Object>} Array of coordinates {x: number, y: number}
+ */
+const findPieceCoords = (position, type) => {
     let results = []; 
     position.forEach((rank, i) =>{ 
       rank.forEach((pos, j) =>{
@@ -59,7 +84,19 @@
  }
 
 
- const getNewMoveNotation = ({
+/**
+ * Generates chess algebraic notation for a move
+ * @param {Object} params - Move parameters
+ * @param {string} params.piece - The piece being moved (e.g., 'wk', 'bp')
+ * @param {number} params.rank - Starting rank position
+ * @param {number} params.file - Starting file position
+ * @param {number} params.x - Target rank position
+ * @param {number} params.y - Target file position
+ * @param {Array<Array<string>>} params.position - Current board position
+ * @param {string} [params.promotesTo] - Piece type for pawn promotion
+ * @returns {string} Algebraic notation string (e.g., 'Nf3', 'O-O', 'exd4')
+ */
+const getNewMoveNotation = ({
     piece,
     rank,
     file,

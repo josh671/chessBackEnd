@@ -7,7 +7,6 @@ const {
   getPawnMoves,
   getPawnCaptures,
   getCastlingMoves,
- 
   getKingPosition,
   getPieces,
   findPieceCoords,
@@ -95,6 +94,7 @@ const arbiter = {
   },
 
   insufficientMaterial: function(position) {
+    console.log(position); 
     const pieces = position.reduce((acc, rank) =>
       acc.concat(rank.filter(x => x)), []
     );

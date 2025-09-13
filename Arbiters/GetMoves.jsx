@@ -1,6 +1,15 @@
 // Logic for all the pieces and their movements
 const { arbiter } = require('./Arbiter.jsx'); // Import arbiter object
 
+/**
+ * Calculates valid moves for a rook piece
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - 8x8 board position array
+ * @param {string} params.piece - The rook piece (e.g., 'wr', 'br')
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid move coordinates [[rank, file], ...]
+ */
 const getRookMoves = ({ position, piece, rank, file }) => {
   const moves = [];
   const us = piece[0];
@@ -27,6 +36,14 @@ const getRookMoves = ({ position, piece, rank, file }) => {
   return moves;
 };
 
+/**
+ * Calculates valid moves for a knight piece
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - 8x8 board position array
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid move coordinates [[rank, file], ...]
+ */
 const getKnightMoves = ({ position, rank, file }) => {
   const moves = [];
   const enemy = position[rank][file].startsWith('w') ? 'b' : 'w';
@@ -48,6 +65,15 @@ const getKnightMoves = ({ position, rank, file }) => {
   return moves;
 };
 
+/**
+ * Calculates valid moves for a bishop piece
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - 8x8 board position array
+ * @param {string} params.piece - The bishop piece (e.g., 'wb', 'bb')
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid move coordinates [[rank, file], ...]
+ */
 const getBishopMoves = ({ position, piece, rank, file }) => {
   const moves = [];
   const us = piece[0];
@@ -73,6 +99,15 @@ const getBishopMoves = ({ position, piece, rank, file }) => {
   return moves;
 };
 
+/**
+ * Calculates valid moves for a queen piece (combines rook and bishop moves)
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - 8x8 board position array
+ * @param {string} params.piece - The queen piece (e.g., 'wq', 'bq')
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid move coordinates [[rank, file], ...]
+ */
 const getQueenMoves = ({ position, piece, rank, file }) => {
   return [
     ...getRookMoves({ position, piece, rank, file }),
@@ -80,6 +115,15 @@ const getQueenMoves = ({ position, piece, rank, file }) => {
   ];
 };
 
+/**
+ * Calculates valid moves for a king piece (one square in any direction)
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - 8x8 board position array
+ * @param {string} params.piece - The king piece (e.g., 'wk', 'bk')
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid move coordinates [[rank, file], ...]
+ */
 const getKingMoves = ({ position, piece, rank, file }) => {
   const moves = [];
   const us = piece[0];
@@ -100,6 +144,15 @@ const getKingMoves = ({ position, piece, rank, file }) => {
   return moves;
 };
 
+/**
+ * Calculates valid forward moves for a pawn piece (not captures)
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - 8x8 board position array
+ * @param {string} params.piece - The pawn piece (e.g., 'wp', 'bp')
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid move coordinates [[rank, file], ...]
+ */
 const getPawnMoves = ({ position, piece, rank, file }) => {
   const moves = [];
   const dir = piece === 'wp' ? 1 : -1;
@@ -114,6 +167,16 @@ const getPawnMoves = ({ position, piece, rank, file }) => {
   return moves;
 };
 
+/**
+ * Calculates valid capture moves for a pawn piece (diagonal attacks and en passant)
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - Current 8x8 board position array
+ * @param {Array<Array<string>>} params.prevPosition - Previous board position for en passant detection
+ * @param {string} params.piece - The pawn piece (e.g., 'wp', 'bp')
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid capture coordinates [[rank, file], ...]
+ */
 const getPawnCaptures = ({ position, prevPosition, piece, rank, file }) => {
   const moves = [];
   const dir = piece === 'wp' ? 1 : -1;
@@ -145,6 +208,16 @@ const getPawnCaptures = ({ position, prevPosition, piece, rank, file }) => {
   return moves;
 };
 
+/**
+ * Calculates valid castling moves for a king piece
+ * @param {Object} params - Parameters object
+ * @param {Array<Array<string>>} params.position - 8x8 board position array
+ * @param {string} params.castleDirection - Current castling rights ('both', 'left', 'right', 'none')
+ * @param {string} params.piece - The king piece (e.g., 'wk', 'bk')
+ * @param {number} params.rank - Current rank (row) position (0-7)
+ * @param {number} params.file - Current file (column) position (0-7)
+ * @returns {Array<Array<number>>} Array of valid castling coordinates [[rank, file], ...]
+ */
 const getCastlingMoves = ({ position, castleDirection, piece, rank, file }) => {
   const { arbiter } = require('./Arbiter.jsx');
   const moves = [];
@@ -178,24 +251,57 @@ const getCastlingMoves = ({ position, castleDirection, piece, rank, file }) => {
   return moves;
 };
 
+/**
+ * Determines updated castling rights after a piece move
+ * @param {Object} params - Parameters object
+ * @param {Object} params.castleDirection - Current castling rights object {w: 'both'|'left'|'right'|'none', b: 'both'|'left'|'right'|'none'}
+ * @param {string} params.piece - The piece being moved (e.g., 'wk', 'wr', 'bk', 'br')
+ * @param {number} params.file - File (column) position of the moved piece (0-7)
+ * @param {number} params.rank - Rank (row) position of the moved piece (0-7)
+ * @returns {Object|null} Updated castling direction object {player: string, direction: string} or null if no change
+ */
 const getCastlingDirections = ({ castleDirection, piece, file, rank }) => {
   rank = Number(rank);
   file = Number(file);
-  const direction = castleDirection[piece[0]];
+  const player = piece[0];
+  const currentDirection = castleDirection[player];
 
-  if (piece.endsWith('k')) return 'none';
+  // If king moves, disable all castling
+  if (piece.endsWith('k')) {
+    return {
+      player: player,
+      direction: 'none'
+    };
+  }
 
+  // If queenside rook (file 0) moves, remove left castling
   if (file === 0 && (rank === 0 || rank === 7)) {
-    return direction === 'both' ? 'right' : direction === 'left' ? 'none' : direction;
+    const newDirection = currentDirection === 'both' ? 'right' : currentDirection === 'left' ? 'none' : currentDirection;
+    return {
+      player: player,
+      direction: newDirection
+    };
   }
 
+  // If kingside rook (file 7) moves, remove right castling  
   if (file === 7 && (rank === 0 || rank === 7)) {
-    return direction === 'both' ? 'left' : direction === 'right' ? 'none' : direction;
+    const newDirection = currentDirection === 'both' ? 'left' : currentDirection === 'right' ? 'none' : currentDirection;
+    return {
+      player: player,
+      direction: newDirection
+    };
   }
 
-  return direction;
+  // No change needed
+  return null;
 };
 
+/**
+ * Finds the position of a player's king on the board
+ * @param {Array<Array<string>>} position - 8x8 board position array
+ * @param {string} player - Player color ('w' for white, 'b' for black)
+ * @returns {Array<number>|null} King position as [rank, file] or null if not found
+ */
 const getKingPosition = (position, player) => {
   for (let x = 0; x < 8; x++) {
     for (let y = 0; y < 8; y++) {
@@ -207,6 +313,12 @@ const getKingPosition = (position, player) => {
   return null;
 };
 
+/**
+ * Gets all pieces for a specific player from the board
+ * @param {Array<Array<string>>} position - 8x8 board position array
+ * @param {string} player - Player color ('w' for white, 'b' for black)
+ * @returns {Array<Object>} Array of piece objects with {piece: string, rank: number, file: number}
+ */
 const getPieces = (position, player) => {
   const pieces = [];
   position.forEach((rank, x) => {
