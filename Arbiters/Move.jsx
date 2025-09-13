@@ -3,6 +3,11 @@ const {copyPosition} = require('../Board/helper.jsx');
 
 function movePiece ({position,piece,rank,file,x,y}){
     
+    if (x < 0 || x > 7 || y < 0 || y > 7 || rank < 0 || rank > 7 || file < 0 || file > 7) {
+        console.error('Invalid coordinates:', { x, y, rank, file });
+        return position;
+    }
+    
     const newPosition = copyPosition(position)
     
     if(piece.endsWith('k') && Math.abs(y - file) > 1){ // Castles
@@ -21,9 +26,16 @@ function movePiece ({position,piece,rank,file,x,y}){
    
     return newPosition
 }
-
 function movePawn({position, piece, rank, file,x, y }){
+    console.log('move pawn', position, piece, rank, file, x , y); 
+    
+    if (x < 0 || x > 7 || y < 0 || y > 7 || rank < 0 || rank > 7 || file < 0 || file > 7) {
+        console.error('Invalid pawn move coordinates:', { x, y, rank, file });
+        return position;
+    }
+    
     const newPosition = copyPosition(position); 
+    console.log('newPosition', newPosition[x][y]); 
     if(!newPosition[x][y] && x !== rank && y !== file){
         newPosition[rank][y] = '';   
     }

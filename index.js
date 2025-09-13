@@ -4,8 +4,8 @@ const { Server } = require('socket.io')
 const cors = require('cors')
 
 const { createPosition } = require('./Board/helper.jsx')
-const { arbiter } = require('./Arbiter/Arbiter.jsx')
-const { getCastlingDirections } = require('./Arbiter/GetMoves.jsx')
+const { arbiter } = require('./Arbiters/Arbiter.jsx')
+const { getCastlingDirections, getKingPosition } = require('./Arbiters/GetMoves.jsx')
 const { updateCastling } = require('./Reducer/Actions/game.jsx')
 const { actionTypes } = require('./Reducer/Actions/actionTypes.jsx')
 const { emit } = require('process')
@@ -13,6 +13,7 @@ const { openPromotion } = require('./Reducer/Actions/popup.jsx')
 const { reducer } = require('./Reducer/Actions/move.jsx') 
 const { detectCheckMate } = require('./Reducer/Actions/game.jsx')
 const { initGameState } = require('./Constants.js')
+const { detectInsufficientMaterial } = require('./Reducer/Actions/game.jsx')
 const app = express()
 
 // Middleware
@@ -77,7 +78,7 @@ io.on('connection', (socket) => {
       games[roomId] = {
         board: createPosition(), // starting board
         turn: 'w', // white starts
-        castleDirection: { w: {}, b: {} },
+        castleDirection: { w: 'both', b: 'both' }
       }
     }
 
@@ -85,9 +86,11 @@ io.on('connection', (socket) => {
     socketRoomMap[socket.id] = roomId
 
     // Send initial game state to this client
+    //works for now but have to off/on everytime you make a change
     socket.emit('board', {
-      board: games[roomId].board,
-      turn: games[roomId].turn,
+      type:actionTypes.NEW_GAME, 
+      payload: initGameState, 
+       
     })
   })
 
@@ -132,6 +135,13 @@ io.on('connection', (socket) => {
       file: move.file,
     })
     if (castleDirection) {
+      // Update server game state
+      if (!games[roomId].castleDirection) {
+        games[roomId].castleDirection = { w: 'both', b: 'both' };
+      }
+      games[roomId].castleDirection[castleDirection.player] = castleDirection.direction;
+      
+      // Emit to all clients
       io.to(roomId).emit('castlingUpdate', {
         type: actionTypes.CAN_CASTLE,
         payload: castleDirection,
@@ -144,7 +154,42 @@ io.on('connection', (socket) => {
       player: opponent,
     })
 
-    // returns true because it is in checkmate
+    // Calculate check status for both players after the move
+    const whiteInCheck = arbiter.isPlayerInCheck({
+      positionAfterMove: newBoard,
+      position: currentPosition,
+      player: 'w',
+    });
+
+    const blackInCheck = arbiter.isPlayerInCheck({
+      positionAfterMove: newBoard,
+      position: currentPosition,
+      player: 'b',
+    });
+
+    // Send clear check status for both players
+    const checkStatus = {
+      white: {
+        isInCheck: whiteInCheck,
+        kingPosition: whiteInCheck ? getKingPosition(newBoard, 'w') : null
+      },
+      black: {
+        isInCheck: blackInCheck,
+        kingPosition: blackInCheck ? getKingPosition(newBoard, 'b') : null
+      },
+      turn: opponent // Next player's turn
+    };
+
+    io.to(roomId).emit('checkStatus', checkStatus);
+
+  if(arbiter.insufficientMaterial(newBoard)){
+    io.to(roomId).emit('insufficientMaterial', {
+      type: actionTypes.INSUFFICIENT_MATERIAL, 
+    }
+    )
+  }
+
+    
     if (
       arbiter.isCheckMate(
         newBoard,
@@ -155,13 +200,23 @@ io.on('connection', (socket) => {
         file,
       )
     ) {
-      //kind of works if using opponent instead of piece
-
       io.to(roomId).emit('isCheckMate', ({type: actionTypes.WIN, payload: move.piece[0]}))
     }
 
 
     if ((piece === 'wp' && x == 7) || (piece === 'bp' && x === 0)) {
+      const promotingPlayer = piece[0]; // 'w' or 'b'
+      
+      // Send promotion status to ALL players in room
+      io.to(roomId).emit('promotionStatus', {
+        type: 'SET_PROMOTION_STATUS',
+        payload: {
+          isPromoting: true,
+          promotingPlayer: promotingPlayer
+        }
+      });
+      
+      // Only send popup to the promoting player
       socket.emit('openPromotionBox', {
         action: openPromotion({
           rank: Number(rank),
@@ -183,10 +238,21 @@ io.on('connection', (socket) => {
         newBoard[rank][file] = ''
         newBoard[x][y] = promotion.piece
         games[roomId].board = newBoard
+        
         io.to(roomId).emit('moveResult', {
           newPosition: newBoard,
           turn: games[roomId].turn,
         })
+
+        // Clear promotion status after promotion is completed
+        io.to(roomId).emit('promotionStatus', {
+          type: 'SET_PROMOTION_STATUS',
+          payload: {
+            isPromoting: false,
+            promotingPlayer: null
+          }
+        });
+        
         return
       })
     }
@@ -207,6 +273,37 @@ io.on('connection', (socket) => {
   })
 
 
+  // Handle request for valid moves
+  socket.on('getValidMoves', (moveRequest) => {
+    console.log('♟️ Valid moves requested:', moveRequest);
+    const roomId = socketRoomMap[socket.id];
+    
+    if (!roomId || !games[roomId]) {
+      console.log('❌ No room/game found for valid moves request');
+      return;
+    }
+
+    const { piece, rank, file, position, castleDirection } = moveRequest;
+    
+    // Calculate valid moves using backend arbiter
+    const validMoves = arbiter.getValidMoves({
+      position: position,
+      prevPosition: games[roomId].oldPosition,
+      castleDirection: games[roomId].castleDirection,
+      piece,
+      rank,
+      file
+    });
+
+    // Send valid moves back to the requesting client
+    socket.emit('validMoves', {
+      piece,
+      rank,
+      file,
+      validMoves
+    });
+  });
+
   socket.on('setUpNewGame', (newGame) =>{ 
      const roomId = newGame.roomId; 
      console.log('Setting up new game in room', roomId);
@@ -218,6 +315,7 @@ io.on('connection', (socket) => {
       games[roomId] = {
         board: createPosition(), // starting board
         turn: 'w', // white starts
+        castleDirection: { w: 'both', b: 'both' }
       }
 
       io.to(roomId).emit('newGame', {
