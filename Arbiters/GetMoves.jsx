@@ -226,11 +226,16 @@ const getCastlingMoves = ({ position, castleDirection, piece, rank, file }) => {
   const baseRank = isWhite ? 0 : 7;
   const player = isWhite ? 'w' : 'b';
 
-  if (file !== 4 || rank !== baseRank || castleDirection === 'none') return moves;
+  // Handle both object and string formats for castleDirection
+  const playerCastleDirection = typeof castleDirection === 'object'
+    ? castleDirection[player]
+    : castleDirection;
+
+  if (file !== 4 || rank !== baseRank || playerCastleDirection === 'none') return moves;
 
   if (arbiter.isPlayerInCheck({ positionAfterMove: position, position, player })) return moves;
 
-  if (["left", "both"].includes(castleDirection) &&
+  if (["left", "both"].includes(playerCastleDirection) &&
     !position[baseRank][3] && !position[baseRank][2] && !position[baseRank][1] &&
     position[baseRank][0] === player + 'r' &&
     !arbiter.isPlayerInCheck({ positionAfterMove: arbiter.performMove({ position, piece, rank, file, x: baseRank, y: 3 }), player }) &&
@@ -239,7 +244,7 @@ const getCastlingMoves = ({ position, castleDirection, piece, rank, file }) => {
     moves.push([baseRank, 2]);
   }
 
-  if (["right", "both"].includes(castleDirection) &&
+  if (["right", "both"].includes(playerCastleDirection) &&
     !position[baseRank][5] && !position[baseRank][6] &&
     position[baseRank][7] === player + 'r' &&
     !arbiter.isPlayerInCheck({ positionAfterMove: arbiter.performMove({ position, piece, rank, file, x: baseRank, y: 5 }), player }) &&
