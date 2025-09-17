@@ -1,22 +1,29 @@
+// Chess Game Backend Server
+// Handles multiplayer chess game logic, socket connections, and game state management
+
 const express = require('express')
 const http = require('http')
 const { Server } = require('socket.io')
 const cors = require('cors')
 
-const { createPosition } = require('./Board/helper.jsx')
+// Import chess game logic modules
+const { createPosition, getCurrentMoveNotation } = require('./Board/helper.jsx')
 const { arbiter } = require('./Arbiters/Arbiter.jsx')
 const { getCastlingDirections, getKingPosition } = require('./Arbiters/GetMoves.jsx')
 const { updateCastling } = require('./Reducer/Actions/game.jsx')
 const { actionTypes } = require('./Reducer/Actions/actionTypes.jsx')
 const { emit } = require('process')
 const { openPromotion } = require('./Reducer/Actions/popup.jsx')
-const { reducer } = require('./Reducer/Actions/move.jsx') 
+const { reducer } = require('./Reducer/Actions/move.jsx')
 const { detectCheckMate } = require('./Reducer/Actions/game.jsx')
 const { initGameState } = require('./Constants.js')
 const { detectInsufficientMaterial } = require('./Reducer/Actions/game.jsx')
+
+
+// Create Express application
 const app = express()
 
-// Middleware
+// Configure CORS middleware to allow requests from React frontend
 app.use(
   cors({
     origin: 'http://localhost:3000',
@@ -25,12 +32,17 @@ app.use(
   }),
 )
 
-// Simple test route
+/**
+ * Simple health check endpoint
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {string} Simple status message
+ */
 app.get('/', (req, res) => {
   res.send('Server is running')
 })
 
-// Create HTTP and Socket.IO server
+// Create HTTP server and Socket.IO server with CORS configuration
 const server = http.createServer(app)
 const io = new Server(server, {
   cors: {
@@ -40,21 +52,26 @@ const io = new Server(server, {
   },
 })
 
-// Game state storage
-const games = {} // Maps roomId => game state
-const socketRoomMap = {} // Maps socket.id => roomId
-const roomPlayers = {} // Maps roomId => { w: socketId, b: socketId }
+// Game state storage objects
+const games = {}         // Maps roomId => { board, turn, castleDirection, oldPosition }
+const socketRoomMap = {} // Maps socket.id => roomId (for tracking which room each socket is in)
+const roomPlayers = {}   // Maps roomId => { w: socketId, b: socketId } (player assignments)
 
-// Handle client connections
+// Handle new client socket connections
 io.on('connection', (socket) => {
-  console.log('✅ New client connected:', socket.id)
+  // console.log('✅ New client connected:', socket.id)
 
-  // Join a game room
+  /**
+   * Handle player joining a game room
+   * @param {string} roomId - Unique identifier for the game room
+   * Assigns player colors (white/black), initializes game state, and sends initial board
+   */
   socket.on('joinRoom', (roomId) => {
-    //Assign player Color
+    // Initialize room players object if it doesn't exist
     if (!roomPlayers[roomId]) roomPlayers[roomId] = {}
     let color = 'w'
 
+    // Assign player color based on availability
     if (!roomPlayers[roomId].w) {
       roomPlayers[roomId].w = socket.id
       color = 'w'
@@ -62,48 +79,60 @@ io.on('connection', (socket) => {
       roomPlayers[roomId].b = socket.id
       color = 'b'
     } else {
-      //Room Full
+      // Room is full, reject the connection
       socket.emit('roomFull')
       return
     }
-    //console.log('color', {color});
+
+    // Notify client of their assigned color
     socket.emit('playerColor', { color })
     console.log('roomPlayers:', JSON.stringify(roomPlayers, null, 2))
     console.log(
       `📥 Client ${socket.id} is joining room ${roomId} and color is ${color}`,
     )
 
-    // Initialize game state for room if not already created
+    // Initialize game state for new rooms
     if (!games[roomId]) {
       games[roomId] = {
-        board: createPosition(), // starting board
-        turn: 'w', // white starts
-        castleDirection: { w: 'both', b: 'both' }
+        board: createPosition(),                    // Starting chess position
+        turn: 'w',                                 // White moves first
+        castleDirection: { w: 'both', b: 'both' } // Both sides can castle initially
       }
     }
 
+    // Add socket to room and track the mapping
     socket.join(roomId)
     socketRoomMap[socket.id] = roomId
 
-    // Send initial game state to this client
-    //works for now but have to off/on everytime you make a change
+    // Send initial game state to the newly joined client
     socket.emit('board', {
-      type:actionTypes.NEW_GAME, 
-      payload: initGameState, 
-       
+      type: actionTypes.NEW_GAME,
+      payload: initGameState,
     })
   })
 
-  // Handle move from a client
+  /**
+   * Handle chess move from a client
+   * @param {Object} move - Move object containing piece, position, and destination
+   * @param {string} move.piece - Chess piece notation (e.g., 'wp', 'bk')
+   * @param {number} move.rank - Starting rank (0-7)
+   * @param {number} move.file - Starting file (0-7)
+   * @param {number} move.x - Destination rank (0-7)
+   * @param {number} move.y - Destination file (0-7)
+   * @param {Array} move.currentPosition - Current board state
+   * @param {string} move.opponent - Opponent player color ('w' or 'b')
+   * Validates move, updates game state, checks for special conditions, and broadcasts results
+   */
   socket.on('makeMove', (move) => {
-    //console.log('♟️ Move received:', move)
     const roomId = socketRoomMap[socket.id]
 
+    // Validate that socket is associated with a room
     if (!roomId) {
-      console.log('❌ No room associated with this socket')
+      // console.log('❌ No room associated with this socket')
       return
     }
-    //Only allow move if it's this players turn
+
+    // Validate it's the player's turn
     const currentTurn = games[roomId].turn
     const playerColor = Object.entries(roomPlayers[roomId]).find(
       ([color, id]) => id === socket.id,
@@ -114,10 +143,10 @@ io.on('connection', (socket) => {
       return
     }
 
-    //console.log(`♟️ Move received in room ${roomId}:`, move)
+    // Extract move parameters
     const { piece, rank, file, x, y, currentPosition } = move
 
-    // Perform the move using the arbiter
+    // Execute the move using the chess arbiter
     let newBoard = arbiter.performMove({
       position: currentPosition,
       piece,
@@ -128,6 +157,7 @@ io.on('connection', (socket) => {
     })
     const opponent = move.opponent
 
+    // Check if move affects castling rights
     const castleDirection = getCastlingDirections({
       castleDirection: move.castleDirection,
       piece: move.piece,
@@ -135,19 +165,20 @@ io.on('connection', (socket) => {
       file: move.file,
     })
     if (castleDirection) {
-      // Update server game state
+      // Update server game state with new castling restrictions
       if (!games[roomId].castleDirection) {
         games[roomId].castleDirection = { w: 'both', b: 'both' };
       }
       games[roomId].castleDirection[castleDirection.player] = castleDirection.direction;
 
-      // Emit to all clients
+      // Notify all clients of castling rights change
       io.to(roomId).emit('castlingUpdate', {
         type: actionTypes.CAN_CASTLE,
         payload: castleDirection,
       })
     }
 
+    // Check if opponent is in check after the move
     const isInCheck = arbiter.isPlayerInCheck({
       positionAfterMove: newBoard,
       position: currentPosition,
@@ -167,7 +198,7 @@ io.on('connection', (socket) => {
       player: 'b',
     });
 
-    // Send clear check status for both players
+    // Prepare check status data for both players
     const checkStatus = {
       white: {
         isInCheck: whiteInCheck,
@@ -180,16 +211,17 @@ io.on('connection', (socket) => {
       turn: opponent // Next player's turn
     };
 
+    // Broadcast check status to all players in room
     io.to(roomId).emit('checkStatus', checkStatus);
 
-  if(arbiter.insufficientMaterial(newBoard)){
-    io.to(roomId).emit('insufficientMaterial', {
-      type: actionTypes.INSUFFICIENT_MATERIAL, 
+    // Check for insufficient material (automatic draw)
+    if(arbiter.insufficientMaterial(newBoard)){
+      io.to(roomId).emit('insufficientMaterial', {
+        type: actionTypes.INSUFFICIENT_MATERIAL,
+      })
     }
-    )
-  }
 
-    
+    // Check for checkmate
     if (
       arbiter.isCheckMate(
         newBoard,
@@ -204,10 +236,11 @@ io.on('connection', (socket) => {
     }
 
 
+    // Handle pawn promotion (when pawn reaches opposite end of board)
     if ((piece === 'wp' && x == 7) || (piece === 'bp' && x === 0)) {
-      const promotingPlayer = piece[0]; // 'w' or 'b'
-      
-      // Send promotion status to ALL players in room
+      const promotingPlayer = piece[0]; // Extract player color ('w' or 'b')
+
+      // Notify all players that promotion is occurring
       io.to(roomId).emit('promotionStatus', {
         type: 'SET_PROMOTION_STATUS',
         payload: {
@@ -215,8 +248,8 @@ io.on('connection', (socket) => {
           promotingPlayer: promotingPlayer
         }
       });
-      
-      // Only send popup to the promoting player
+
+      // Send promotion UI popup only to the promoting player
       socket.emit('openPromotionBox', {
         action: openPromotion({
           rank: Number(rank),
@@ -225,8 +258,17 @@ io.on('connection', (socket) => {
           y: y,
         }),
       })
+      /**
+       * Handle pawn promotion piece selection
+       * @param {Object} promotion - Promotion data
+       * @param {string} promotion.piece - Selected promotion piece (e.g., 'wq', 'wr')
+       * @param {Array} promotion.newPosition - Board state after promotion
+       * Updates board with promoted piece and broadcasts result
+       */
       socket.on('promotePawn', (promotion) => {
-        console.log('Promotion received:', promotion)
+        // console.log('Promotion received:', promotion)
+
+        // Perform the promotion move
         newBoard = arbiter.performMove({
           position: promotion.newPosition,
           piece: promotion.piece,
@@ -235,16 +277,19 @@ io.on('connection', (socket) => {
           x: promotion.x,
           y: promotion.y,
         })
+
+        // Clear original pawn position and place promoted piece
         newBoard[rank][file] = ''
         newBoard[x][y] = promotion.piece
         games[roomId].board = newBoard
-        
+
+        // Broadcast updated board to all players
         io.to(roomId).emit('moveResult', {
           newPosition: newBoard,
           turn: games[roomId].turn,
         })
 
-        // Clear promotion status after promotion is completed
+        // Clear promotion status after completion
         io.to(roomId).emit('promotionStatus', {
           type: 'SET_PROMOTION_STATUS',
           payload: {
@@ -252,20 +297,29 @@ io.on('connection', (socket) => {
             promotingPlayer: null
           }
         });
-        
+
         return
       })
     }
 
-    console.log('turn before update', games[roomId].board)
+    // console.log('turn before update', games[roomId].board)
 
-    // Update game state
-    games[roomId].board = newBoard
-    console.log('games[roomId].turn', games[roomId].turn)
-    games[roomId].turn = games[roomId].turn === 'w' ? 'b' : 'w'
-    games[roomId].oldPosition = currentPosition
+    // Update server game state with move results
+    games[roomId].board = newBoard                                      // New board position
+    // console.log('games[roomId].turn', games[roomId].turn)
+    games[roomId].turn = games[roomId].turn === 'w' ? 'b' : 'w'        // Switch turns
+    games[roomId].oldPosition = currentPosition                         // Store previous position for en passant
 
-    // Send updated board back to all clients in the room
+  //Here is new move notation 
+  console.log('here is what is being sent from the front end', piece, rank, file, x, y); 
+  const currentMoveNotation =  getCurrentMoveNotation(piece, rank, file, x, y)
+   
+  io.to(roomId).emit('pastMoves', {
+    currentMoveNotation, 
+  })
+
+
+    // Broadcast move result to all players in the room
     io.to(roomId).emit('moveResult', {
       newPosition: newBoard,
       turn: games[roomId].turn,
@@ -273,19 +327,28 @@ io.on('connection', (socket) => {
   })
 
 
-  // Handle request for valid moves
+  /**
+   * Handle request for valid moves calculation
+   * @param {Object} moveRequest - Request for valid moves
+   * @param {string} moveRequest.piece - Chess piece notation
+   * @param {number} moveRequest.rank - Piece's current rank
+   * @param {number} moveRequest.file - Piece's current file
+   * @param {Array} moveRequest.position - Current board state
+   * Calculates and returns all legal moves for the specified piece
+   */
   socket.on('getValidMoves', (moveRequest) => {
-    console.log('♟️ Valid moves requested:', moveRequest);
+    // console.log('♟️ Valid moves requested:', moveRequest);
     const roomId = socketRoomMap[socket.id];
-    
+
+    // Validate room and game exist
     if (!roomId || !games[roomId]) {
-      console.log('❌ No room/game found for valid moves request');
+      // console.log('❌ No room/game found for valid moves request');
       return;
     }
 
     const { piece, rank, file, position, castleDirection } = moveRequest;
-    
-    // Calculate valid moves using backend arbiter
+
+    // Calculate all legal moves using chess rules engine
     const validMoves = arbiter.getValidMoves({
       position: position,
       prevPosition: games[roomId].oldPosition,
@@ -295,7 +358,7 @@ io.on('connection', (socket) => {
       file
     });
 
-    // Send valid moves back to the requesting client
+    // Send calculated moves back to requesting client
     socket.emit('validMoves', {
       piece,
       rank,
@@ -304,51 +367,70 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('setUpNewGame', (newGame) =>{ 
-     const roomId = newGame.roomId; 
-     console.log('Setting up new game in room', roomId);
+  /**
+   * Handle new game setup request
+   * @param {Object} newGame - New game configuration
+   * @param {string} newGame.roomId - Room to reset
+   * Resets game state to initial position and notifies all players
+   */
+  socket.on('setUpNewGame', (newGame) => {
+     const roomId = newGame.roomId;
+     // console.log('Setting up new game in room', roomId);
+
+     // Validate roomId is provided
      if(!roomId){
-        console.log('No roomId provided for new game setup');
-        return; 
+        // console.log('No roomId provided for new game setup');
+        return;
       }
 
+      // Reset game state to initial position
       games[roomId] = {
-        board: createPosition(), // starting board
-        turn: 'w', // white starts
-        castleDirection: { w: 'both', b: 'both' }
+        board: createPosition(),                    // Starting chess position
+        turn: 'w',                                 // White moves first
+        castleDirection: { w: 'both', b: 'both' } // Reset castling rights
       }
 
+      // Notify all players in room of new game
       io.to(roomId).emit('newGame', {
-        type:actionTypes.NEW_GAME, 
-        payload: initGameState, 
-        
+        type: actionTypes.NEW_GAME,
+        payload: initGameState,
       })
 
+      // Close any open popups
       io.to(roomId).emit('closePopup', {
         type: actionTypes.CLOSE_POPUP,
-        
       })
-
- 
   })
 
 
 
 
-  // Handle disconnect
+  /**
+   * Handle client disconnection
+   * Cleans up player assignments and room mappings when a client leaves
+   */
   socket.on('disconnect', () => {
     const roomId = socketRoomMap[socket.id]
+
+    // Remove player from room assignments
     if (roomId && roomPlayers[roomId]) {
       if (roomPlayers[roomId].w === socket.id) delete roomPlayers[roomId].w
       if (roomPlayers[roomId].b === socket.id) delete roomPlayers[roomId].b
+
+      // Clean up empty room
       if (Object.keys(roomPlayers[roomId]).length === 0)
         delete roomPlayers[roomId]
     }
+
+    // Remove socket from room mapping
     if (roomId) delete socketRoomMap[socket.id]
   })
 })
 
-// Start the server
+/**
+ * Start the HTTP server
+ * Listens on port 3001 for incoming connections
+ */
 const PORT = 3001
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`)

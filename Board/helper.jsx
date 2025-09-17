@@ -129,6 +129,22 @@ const getNewMoveNotation = ({
   
     return note;
   }; 
+  
+
+  const getCurrentMoveNotation = (piece, rank, file, x, y)=>{
+    const fileLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] // Standard chess notation 
+    let note = ""; 
+    rank = Number(rank); 
+    file = Number(file); 
+
+    let currentPosition = fileLetters[file] + " " + (rank + 1); 
+    // let endingPosition = fileLetters[file] + " " + (x + 1); works with pawns
+     let endingPosition = fileLetters[y] + " " + (x + 1); 
+    
+    return piece + " " +  currentPosition + ' to ' + endingPosition; 
+
+  }
+
 
 
   module.exports = {
@@ -137,5 +153,6 @@ const getNewMoveNotation = ({
     areSameColorTiles,
     findPieceCoords,
     getNewMoveNotation,
-    getCharacter
+    getCharacter, 
+    getCurrentMoveNotation
   }
