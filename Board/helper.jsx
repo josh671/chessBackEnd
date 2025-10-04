@@ -1,3 +1,6 @@
+ 
+
+
 /**
  * Converts a file number to its corresponding chess notation letter
  * @param {number} file - File number (0-7)
@@ -132,6 +135,10 @@ const getNewMoveNotation = ({
   
 
   const getCurrentMoveNotation = (piece, rank, file, x, y)=>{
+   
+    const whitePieceIcons =  { wk: '♚', wq: '♛', wr: '♜', wb: '♝', wn: '♞', wp: '♟' } 
+    const blackPieceIcons = { bk: '♔', bq: '♕', br: '♖', bb: '♗', bn: '♘', bp: '♙' }
+   
     const fileLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] // Standard chess notation 
     let note = ""; 
     rank = Number(rank); 
@@ -141,8 +148,11 @@ const getNewMoveNotation = ({
     // let endingPosition = fileLetters[file] + " " + (x + 1); works with pawns
      let endingPosition = fileLetters[y] + " " + (x + 1); 
     
-    return piece + " " +  currentPosition + ' to ' + endingPosition; 
 
+    if(piece[0] == 'w')
+      return whitePieceIcons[piece] + " " +  currentPosition + ' to ' + endingPosition; 
+    else 
+      return blackPieceIcons[piece] + " " +  currentPosition + ' to ' + endingPosition; 
   }
 
 
