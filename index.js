@@ -56,7 +56,9 @@ const io = new Server(server, {
 const games = {}         // Maps roomId => { board, turn, castleDirection, oldPosition }
 const socketRoomMap = {} // Maps socket.id => roomId (for tracking which room each socket is in)
 const roomPlayers = {}   // Maps roomId => { w: socketId, b: socketId } (player assignments)
-
+const usernames = {} // Maps socket.id => username (for tracking player names)
+const usernameToSocket = {} //Maps username => socket.id (for reconnection) 
+const roomUsernames = {} // Maps roomId => {w: username, b: username} (persistent player names); 
 // Handle new client socket connections
 io.on('connection', (socket) => {
   // console.log('✅ New client connected:', socket.id)
@@ -66,30 +68,68 @@ io.on('connection', (socket) => {
    * @param {string} roomId - Unique identifier for the game room
    * Assigns player colors (white/black), initializes game state, and sends initial board
    */
-  socket.on('joinRoom', (roomId) => {
-    // Initialize room players object if it doesn't exist
-    if (!roomPlayers[roomId]) roomPlayers[roomId] = {}
-    let color = 'w'
+  socket.on('joinRoom', ({ roomId, username }) => {
 
-    // Assign player color based on availability
-    if (!roomPlayers[roomId].w) {
-      roomPlayers[roomId].w = socket.id
-      color = 'w'
-    } else if (!roomPlayers[roomId].b) {
-      roomPlayers[roomId].b = socket.id
-      color = 'b'
-    } else {
-      // Room is full, reject the connection
-      socket.emit('roomFull')
+    // Validate username
+    if (!username || username.trim() === '') {
+      socket.emit('joinError', { message: 'Username is required' });
       return
     }
 
-    // Notify client of their assigned color
-    socket.emit('playerColor', { color })
-    console.log('roomPlayers:', JSON.stringify(roomPlayers, null, 2))
-    console.log(
-      `📥 Client ${socket.id} is joining room ${roomId} and color is ${color}`,
-    )
+    const userKey = `${username}_${roomId}`;
+
+    // Initialize room players object if it doesn't exist
+    if (!roomPlayers[roomId]) {
+      roomPlayers[roomId] = {}
+      roomUsernames[roomId] = {}
+    }
+
+    let color = null
+    let isReconnecting = false;
+
+    // check if this user is reconnecting (same username in this room) 
+    if (roomUsernames[roomId].w === username) {
+      color = 'w'
+      isReconnecting = true;
+      // update socket ID for reconnecting player
+      roomPlayers[roomId].w = socket.id 
+      usernameToSocket[userKey] = socket.id 
+    } else if (roomUsernames[roomId].b === username) {
+      color = 'b';
+      isReconnecting = true;
+      // update socket ID for reconnecting player
+      roomPlayers[roomId].b = socket.id 
+      usernameToSocket[userKey] = socket.id 
+    } else {
+
+      // New player joining
+      if (!roomPlayers[roomId].w) {
+        roomPlayers[roomId].w = socket.id
+        roomUsernames[roomId].w = username
+        color = 'w'
+      } else if (!roomPlayers[roomId].b) {
+        roomPlayers[roomId].b = socket.id
+        roomUsernames[roomId].b = username; 
+        color = 'b'
+      } else {
+        // Room is full, reject the connection
+        socket.emit('roomFull')
+        return
+      }
+
+      // Store username for this socket
+      usernameToSocket[userKey] = socket.id;
+    }
+
+    // Store username for this socket
+    usernames[socket.id] = username;
+
+    //Notify client of their assigned color and reconnection status
+    socket.emit('playerColor', {color, username, isReconnecting});
+
+    console.log(`📥 ${isReconnecting ? 'Player reconnected' : 'Player joined'}: ${username} (${socket.id}) in room ${roomId} as ${color}`);
+    console.log('roomPlayers:', JSON.stringify(roomPlayers, null, 2));
+    console.log('roomUsernames:', JSON.stringify(roomUsernames, null, 2));
 
     // Initialize game state for new rooms
     if (!games[roomId]) {
@@ -107,8 +147,19 @@ io.on('connection', (socket) => {
     // Send initial game state to the newly joined client
     socket.emit('board', {
       type: actionTypes.NEW_GAME,
-      payload: initGameState,
+      payload: {
+        ...initGameState, 
+        position: [games[roomId].board], 
+        turn: games[roomId].turn, 
+        castleDirection: games[roomId].castleDirection
+      }
     })
+
+    io.to(roomId).emit('playerStatus', {
+      white: roomUsernames[roomId].w || null,
+      black: roomUsernames[roomId].b || null
+    })
+
   })
 
   /**
@@ -215,7 +266,7 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('checkStatus', checkStatus);
 
     // Check for insufficient material (automatic draw)
-    if(arbiter.insufficientMaterial(newBoard)){
+    if (arbiter.insufficientMaterial(newBoard)) {
       io.to(roomId).emit('insufficientMaterial', {
         type: actionTypes.INSUFFICIENT_MATERIAL,
       })
@@ -232,7 +283,7 @@ io.on('connection', (socket) => {
         file,
       )
     ) {
-      io.to(roomId).emit('isCheckMate', ({type: actionTypes.WIN, payload: move.piece[0]}))
+      io.to(roomId).emit('isCheckMate', ({ type: actionTypes.WIN, payload: move.piece[0] }))
     }
 
 
@@ -310,13 +361,13 @@ io.on('connection', (socket) => {
     games[roomId].turn = games[roomId].turn === 'w' ? 'b' : 'w'        // Switch turns
     games[roomId].oldPosition = currentPosition                         // Store previous position for en passant
 
-  //Here is new move notation 
-  console.log('here is what is being sent from the front end', piece, rank, file, x, y); 
-  const currentMoveNotation =  getCurrentMoveNotation(piece, rank, file, x, y)
-   
-  io.to(roomId).emit('pastMoves', {
-    currentMoveNotation, 
-  })
+    //Here is new move notation 
+    console.log('here is what is being sent from the front end', piece, rank, file, x, y);
+    const currentMoveNotation = getCurrentMoveNotation(piece, rank, file, x, y)
+
+    io.to(roomId).emit('pastMoves', {
+      currentMoveNotation,
+    })
 
 
     // Broadcast move result to all players in the room
@@ -374,32 +425,32 @@ io.on('connection', (socket) => {
    * Resets game state to initial position and notifies all players
    */
   socket.on('setUpNewGame', (newGame) => {
-     const roomId = newGame.roomId;
-     // console.log('Setting up new game in room', roomId);
+    const roomId = newGame.roomId;
+    // console.log('Setting up new game in room', roomId);
 
-     // Validate roomId is provided
-     if(!roomId){
-        // console.log('No roomId provided for new game setup');
-        return;
-      }
+    // Validate roomId is provided
+    if (!roomId) {
+      // console.log('No roomId provided for new game setup');
+      return;
+    }
 
-      // Reset game state to initial position
-      games[roomId] = {
-        board: createPosition(),                    // Starting chess position
-        turn: 'w',                                 // White moves first
-        castleDirection: { w: 'both', b: 'both' } // Reset castling rights
-      }
+    // Reset game state to initial position
+    games[roomId] = {
+      board: createPosition(),                    // Starting chess position
+      turn: 'w',                                 // White moves first
+      castleDirection: { w: 'both', b: 'both' } // Reset castling rights
+    }
 
-      // Notify all players in room of new game
-      io.to(roomId).emit('newGame', {
-        type: actionTypes.NEW_GAME,
-        payload: initGameState,
-      })
+    // Notify all players in room of new game
+    io.to(roomId).emit('newGame', {
+      type: actionTypes.NEW_GAME,
+      payload: initGameState,
+    })
 
-      // Close any open popups
-      io.to(roomId).emit('closePopup', {
-        type: actionTypes.CLOSE_POPUP,
-      })
+    // Close any open popups
+    io.to(roomId).emit('closePopup', {
+      type: actionTypes.CLOSE_POPUP,
+    })
   })
 
 
